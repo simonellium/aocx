@@ -1,4 +1,3 @@
-
 //!!! INSERT DATABASE PREFIX !!!//
 const DATABASE_PREFIX="insert-your-database-prefix";
 
@@ -231,7 +230,8 @@ function addPieceSlot(piece) {
 }
 
 // Creates a card to show in the ensemble section.
-function formatMatch(uid, instrument_id, invited, accepted, private_data) {
+function formatMatch(uid, instrument_id, invited, accepted, private_data,
+		     is_stale) {
     var user = allUserProfiles.get(uid);
     var instrument;
     user.instruments.forEach(function(i) {
@@ -267,7 +267,7 @@ function formatMatch(uid, instrument_id, invited, accepted, private_data) {
 	"  <p class='card-text'>" + escape(user.blurb) + "</p>" +
 	(email_status ? "  <h7 class='card-subtitle mb-2 text-" + invitation_class + " '>" + email_status + "</h7>" : "") +
 	"</div>" +
-	"<div class='card-footer'><input type='button' style='width:50%' class='btn btn-sm btn-outline-" + invitation_class + " invite-button' value=" + (invited ? "Disinvite" : "Invite") + "></div>";
+	"<div class='card-footer'><input type='button' style='width:50%' class='btn btn-sm btn-outline-" + invitation_class + " invite-button' value=" + (invited ? (is_stale ? "Expired" : "Disinvite") : "Invite") + "></div>";
     return card;
 }
 
@@ -285,7 +285,8 @@ function search(instrument_id, level) {
 		// add the match card to search result.
 		++matches;
 		$browser_result.append(
-		    formatMatch(userId, instrument_id, false, undefined, null));
+		    formatMatch(userId, instrument_id, false, undefined, null,
+				false));
 		$new_invite_button =
 		    $browser_result.find(".invite-button").last();
 		$new_invite_button.on('click', function() {
@@ -333,8 +334,13 @@ function refreshInvitations() {
     invitationsRef.get().then(function(querySnapshot) {
 	allInvitations.clear();
 	querySnapshot.forEach(function(i) {
+	    if (!allUserProfiles.has(i.id)) {
+		// This invitation went to a stale user. Ignore.
+		return;
+	    }
 	    var invitation = {};
 	    invitation.instrument_id = i.data().instrument_id;
+	    invitation.is_stale = i.data().last_updated <= STALE_DATE;
 	    if (i.data().accepted !== undefined) {
 		invitation.accepted = i.data().accepted;
 		if (invitation.accepted && i.data().invitee_private_data) {
@@ -348,7 +354,8 @@ function refreshInvitations() {
 	allInvitations.forEach(function(invitation, uid, map) {
 	    $invitations_div.append(
 		formatMatch(uid, invitation.instrument_id, true,
-			    invitation.accepted, invitation.private_data));
+			    invitation.accepted, invitation.private_data,
+			    invitation.is_stale));
 	    $new_disinvite_button =
 		$invitations_div.find(".invite-button").last();
 	    $new_disinvite_button.on('click', function() {
@@ -356,7 +363,7 @@ function refreshInvitations() {
 	    });
 	});
 	if (allInvitations.size == 0) {
-	    $invitations_div.text("No invitations sent.");
+	    $invitations_div.text("No invitations sent to active users.");
 	}
     }).catch(function(error) {
 	alert("Error getting sent invitations: " + error);
